@@ -16,16 +16,101 @@
       background: #1a1a1a;
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      touch-action: none;
       user-select: none;
       -webkit-user-select: none;
     }
 
-    #app {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
+    /* ===== Views ===== */
+    .view { display: none; height: 100%; flex-direction: column; }
+    .view.active { display: flex; }
+
+    /* ===== Room List ===== */
+    #rooms-view {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 0 max(16px, env(safe-area-inset-bottom));
+    }
+
+    .rooms-header {
+      padding: 48px 24px 16px;
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+
+    .room-card {
+      margin: 8px 16px;
+      background: #252525;
+      border-radius: 16px;
+      padding: 20px;
       position: relative;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .room-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      background: linear-gradient(to right, #FF8F00, #FFB74D);
+      opacity: 0.25;
+      pointer-events: none;
+      transition: width 0.05s linear;
+    }
+
+    .room-card.off .room-fill { background: #333; opacity: 0.15; }
+
+    .room-info {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .room-name {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .room-bri {
+      font-size: 1.15rem;
+      font-weight: 700;
+      min-width: 48px;
+      text-align: right;
+    }
+
+    .room-lights-count {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+      margin-top: 2px;
+    }
+
+    /* ===== Lamp Carousel ===== */
+    #lamp-view { touch-action: none; }
+
+    .lamp-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      gap: 12px;
+      z-index: 3;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      color: #FFB74D;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 8px;
+      line-height: 1;
+    }
+
+    .lamp-header-title {
+      font-size: 1.1rem;
+      font-weight: 600;
     }
 
     #carousel {
@@ -103,11 +188,9 @@
       transition: background 0.2s, transform 0.2s;
     }
 
-    .dot.active {
-      background: #fff;
-      transform: scale(1.3);
-    }
+    .dot.active { background: #fff; transform: scale(1.3); }
 
+    /* ===== Onboarding ===== */
     .overlay {
       position: fixed;
       inset: 0;
@@ -167,11 +250,24 @@
   </style>
 </head>
 <body>
-  <div id="app">
+
+  <!-- Room List View -->
+  <div id="rooms-view" class="view">
+    <div class="rooms-header">Rooms</div>
+    <div id="room-list"></div>
+  </div>
+
+  <!-- Lamp Carousel View -->
+  <div id="lamp-view" class="view">
+    <div class="lamp-header">
+      <button class="back-btn" id="back-btn">&larr;</button>
+      <div class="lamp-header-title" id="lamp-header-title"></div>
+    </div>
     <div id="carousel"></div>
     <div id="dots"></div>
   </div>
 
+  <!-- Onboarding -->
   <div id="onboarding" class="overlay">
     <div class="overlay-content">
       <h1>BetterHue</h1>
@@ -196,13 +292,13 @@
 
   <script>
     // ===== bridge =====
-    const STORAGE_KEY_IP = 'betterhue_bridgeIp';
-    const STORAGE_KEY_USER = 'betterhue_username';
+    var STORAGE_KEY_IP = 'betterhue_bridgeIp';
+    var STORAGE_KEY_USER = 'betterhue_username';
 
     function getSavedCredentials() {
-      const bridgeIp = localStorage.getItem(STORAGE_KEY_IP);
-      const username = localStorage.getItem(STORAGE_KEY_USER);
-      return (bridgeIp && username) ? { bridgeIp, username } : null;
+      var bridgeIp = localStorage.getItem(STORAGE_KEY_IP);
+      var username = localStorage.getItem(STORAGE_KEY_USER);
+      return (bridgeIp && username) ? { bridgeIp: bridgeIp, username: username } : null;
     }
 
     function saveCredentials(bridgeIp, username) {
@@ -217,21 +313,21 @@
 
     async function discoverBridge() {
       try {
-        const res = await fetch('https://discovery.meethue.com/');
-        const data = await res.json();
+        var res = await fetch('https://discovery.meethue.com/');
+        var data = await res.json();
         if (data.length > 0) return data[0].internalipaddress;
-      } catch {}
+      } catch (e) {}
       return null;
     }
 
     async function authenticate(bridgeIp) {
-      const res = await fetch('https://' + bridgeIp + '/api', {
+      var res = await fetch('https://' + bridgeIp + '/api', {
         method: 'POST',
         body: JSON.stringify({ devicetype: 'betterhue#browser' }),
       });
-      const data = await res.json();
+      var data = await res.json();
       if (data[0] && data[0].success) {
-        const username = data[0].success.username;
+        var username = data[0].success.username;
         saveCredentials(bridgeIp, username);
         return username;
       }
@@ -241,29 +337,185 @@
       throw new Error((data[0] && data[0].error && data[0].error.description) || 'Authentication failed');
     }
 
-    async function getLights(bridgeIp, username) {
-      const res = await fetch('https://' + bridgeIp + '/api/' + username + '/lights');
-      const data = await res.json();
-      if (data.error || Array.isArray(data)) {
-        throw new Error('Invalid response');
-      }
-      return Object.entries(data).map(function(entry) {
-        var id = entry[0], light = entry[1];
-        return { id: id, name: light.name, on: light.state.on, bri: light.state.bri, reachable: light.state.reachable };
-      });
+    async function apiGet(path) {
+      var res = await fetch('https://' + state.bridgeIp + '/api/' + state.username + path);
+      return await res.json();
     }
 
-    async function setBrightness(bridgeIp, username, lightId, bri) {
-      var on = bri > 0;
-      var body = on ? { on: true, bri: bri } : { on: false };
-      await fetch('https://' + bridgeIp + '/api/' + username + '/lights/' + lightId + '/state', {
+    async function apiPut(path, body) {
+      await fetch('https://' + state.bridgeIp + '/api/' + state.username + path, {
         method: 'PUT',
         body: JSON.stringify(body),
       });
     }
 
-    // ===== ui =====
+    async function getRooms() {
+      var groups = await apiGet('/groups');
+      var lights = await apiGet('/lights');
+      var rooms = [];
+      Object.entries(groups).forEach(function(entry) {
+        var id = entry[0], g = entry[1];
+        if (g.type !== 'Room') return;
+        var roomLights = g.lights.map(function(lid) {
+          var l = lights[lid];
+          if (!l) return null;
+          return { id: lid, name: l.name, on: l.state.on, bri: l.state.bri, reachable: l.state.reachable };
+        }).filter(Boolean);
+
+        // Average brightness of lights that are on
+        var onLights = roomLights.filter(function(l) { return l.on; });
+        var avgBri = onLights.length > 0
+          ? Math.round(onLights.reduce(function(s, l) { return s + l.bri; }, 0) / onLights.length)
+          : 0;
+        var anyOn = onLights.length > 0;
+
+        rooms.push({
+          id: id,
+          name: g.name,
+          lights: roomLights,
+          bri: avgBri,
+          on: anyOn,
+        });
+      });
+      return rooms;
+    }
+
+    async function setRoomBrightness(roomId, bri) {
+      var on = bri > 0;
+      var body = on ? { on: true, bri: bri } : { on: false };
+      await apiPut('/groups/' + roomId + '/action', body);
+    }
+
+    async function setLightBrightness(lightId, bri) {
+      var on = bri > 0;
+      var body = on ? { on: true, bri: bri } : { on: false };
+      await apiPut('/lights/' + lightId + '/state', body);
+    }
+
+    // ===== state =====
+    var state = {
+      bridgeIp: null,
+      username: null,
+      rooms: [],
+      currentView: 'rooms', // 'rooms' | 'lamps'
+      currentRoom: null,
+      currentIndex: 0,
+      startBri: 0,
+    };
+
+    // ===== views =====
+    var roomsView = document.getElementById('rooms-view');
+    var lampView = document.getElementById('lamp-view');
+
+    function showView(name) {
+      state.currentView = name;
+      roomsView.classList.toggle('active', name === 'rooms');
+      lampView.classList.toggle('active', name === 'lamps');
+    }
+
+    // ===== room list =====
+    var roomListEl = document.getElementById('room-list');
+
+    function renderRooms() {
+      roomListEl.innerHTML = state.rooms.map(function(room) {
+        var pct = Math.round((room.bri / 254) * 100);
+        var isOff = !room.on;
+        return '<div class="room-card' + (isOff ? ' off' : '') + '" data-room-id="' + room.id + '">' +
+          '<div class="room-fill" style="width: ' + (isOff ? 0 : pct) + '%"></div>' +
+          '<div class="room-info">' +
+            '<div>' +
+              '<div class="room-name">' + room.name + '</div>' +
+              '<div class="room-lights-count">' + room.lights.length + ' light' + (room.lights.length !== 1 ? 's' : '') + '</div>' +
+            '</div>' +
+            '<div class="room-bri">' + (isOff ? 'OFF' : pct + '%') + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      // Attach slider + tap to each card
+      var cards = roomListEl.querySelectorAll('.room-card');
+      cards.forEach(function(card) { initRoomSlider(card); });
+    }
+
+    function updateRoomCard(roomId) {
+      var room = state.rooms.find(function(r) { return r.id === roomId; });
+      if (!room) return;
+      var card = roomListEl.querySelector('[data-room-id="' + roomId + '"]');
+      if (!card) return;
+      var pct = Math.round((room.bri / 254) * 100);
+      var isOff = !room.on;
+      card.className = 'room-card' + (isOff ? ' off' : '');
+      card.querySelector('.room-fill').style.width = (isOff ? 0 : pct) + '%';
+      card.querySelector('.room-bri').textContent = isOff ? 'OFF' : pct + '%';
+    }
+
+    function initRoomSlider(card) {
+      var roomId = card.getAttribute('data-room-id');
+      var startX, startBri, moved, lastApi = 0;
+      var THROTTLE = 100;
+
+      card.addEventListener('pointerdown', function(e) {
+        card.setPointerCapture(e.pointerId);
+        startX = e.clientX;
+        moved = false;
+        var room = state.rooms.find(function(r) { return r.id === roomId; });
+        startBri = room ? (room.on ? room.bri : 0) : 0;
+      });
+
+      card.addEventListener('pointermove', function(e) {
+        var dx = e.clientX - startX;
+        if (Math.abs(dx) < 8 && !moved) return;
+        moved = true;
+
+        var cardW = card.offsetWidth;
+        var briDelta = dx / cardW;
+        var newBri = Math.round(Math.min(254, Math.max(0, startBri + briDelta * 254)));
+
+        var room = state.rooms.find(function(r) { return r.id === roomId; });
+        if (!room) return;
+        room.bri = newBri;
+        room.on = newBri > 0;
+        // Update each light in local state too
+        room.lights.forEach(function(l) { l.bri = newBri; l.on = newBri > 0; });
+        updateRoomCard(roomId);
+
+        var now = Date.now();
+        if (now - lastApi >= THROTTLE) {
+          lastApi = now;
+          setRoomBrightness(roomId, newBri);
+        }
+      });
+
+      function endHandler() {
+        if (moved) {
+          var room = state.rooms.find(function(r) { return r.id === roomId; });
+          if (room) setRoomBrightness(roomId, room.bri);
+        } else {
+          openRoom(roomId);
+        }
+      }
+
+      card.addEventListener('pointerup', endHandler);
+      card.addEventListener('pointercancel', endHandler);
+    }
+
+    // ===== lamp carousel =====
     var trackEl = null;
+
+    function openRoom(roomId) {
+      var room = state.rooms.find(function(r) { return r.id === roomId; });
+      if (!room) return;
+      state.currentRoom = room;
+      state.currentIndex = 0;
+      document.getElementById('lamp-header-title').textContent = room.name;
+      renderLamps(room.lights, 0);
+      initLampGestures();
+      showView('lamps');
+    }
+
+    document.getElementById('back-btn').addEventListener('click', function() {
+      showView('rooms');
+    });
 
     function renderLamps(lights, currentIndex) {
       var carousel = document.getElementById('carousel');
@@ -336,8 +588,8 @@
       trackEl.style.transform = 'translateX(-' + (index * 100) + '%)';
     }
 
-    // ===== swipe =====
-    function initSwipe(carousel, callbacks) {
+    // ===== swipe engine =====
+    function initSwipe(el, callbacks) {
       var LOCK_THRESHOLD = 10;
       var SNAP_THRESHOLD = 0.3;
       var THROTTLE_MS = 100;
@@ -347,10 +599,10 @@
       var lastApiCall = 0;
       var pointerId = null;
 
-      carousel.addEventListener('pointerdown', function(e) {
+      el.addEventListener('pointerdown', function(e) {
         if (pointerId !== null) return;
         pointerId = e.pointerId;
-        carousel.setPointerCapture(e.pointerId);
+        el.setPointerCapture(e.pointerId);
         startX = e.clientX;
         startY = e.clientY;
         deltaX = 0;
@@ -358,7 +610,7 @@
         axis = null;
       });
 
-      carousel.addEventListener('pointermove', function(e) {
+      el.addEventListener('pointermove', function(e) {
         if (e.pointerId !== pointerId) return;
         deltaX = e.clientX - startX;
         deltaY = e.clientY - startY;
@@ -373,7 +625,7 @@
         }
 
         if (axis === 'y') {
-          var screenH = carousel.offsetHeight;
+          var screenH = el.offsetHeight;
           var briDelta = -deltaY / screenH;
           var now = Date.now();
           var throttled = (now - lastApiCall) >= THROTTLE_MS;
@@ -391,7 +643,7 @@
         if (axis === 'y') {
           callbacks.onBrightnessEnd();
         } else if (axis === 'x') {
-          var screenW = carousel.offsetWidth;
+          var screenW = el.offsetWidth;
           var fraction = deltaX / screenW;
           var count = callbacks.getLampCount();
           var cur = callbacks.getCurrentIndex();
@@ -403,30 +655,75 @@
         axis = null;
       }
 
-      carousel.addEventListener('pointerup', endHandler);
-      carousel.addEventListener('pointercancel', endHandler);
+      el.addEventListener('pointerup', endHandler);
+      el.addEventListener('pointercancel', endHandler);
     }
 
-    // ===== app =====
-    var state = {
-      bridgeIp: null,
-      username: null,
-      lights: [],
-      currentIndex: 0,
-      startBri: 0,
-    };
+    function initLampGestures() {
+      var carousel = document.getElementById('carousel');
+      // Remove old listeners by replacing the element
+      var newCarousel = carousel.cloneNode(true);
+      carousel.parentNode.replaceChild(newCarousel, carousel);
+      trackEl = newCarousel.querySelector('.carousel-track');
 
+      initSwipe(newCarousel, {
+        onBrightnessStart: function() {
+          var lamp = state.currentRoom.lights[state.currentIndex];
+          state.startBri = lamp ? (lamp.on ? lamp.bri : 0) : 0;
+        },
+        onBrightnessChange: function(briDelta, sendApi) {
+          var lamp = state.currentRoom.lights[state.currentIndex];
+          if (!lamp) return;
+          var newBri = Math.round(Math.min(254, Math.max(0, state.startBri + briDelta * 254)));
+          lamp.bri = newBri;
+          lamp.on = newBri > 0;
+          updateLamp(state.currentIndex, lamp);
+          if (sendApi) setLightBrightness(lamp.id, newBri);
+        },
+        onBrightnessEnd: function() {
+          var lamp = state.currentRoom.lights[state.currentIndex];
+          if (!lamp) return;
+          setLightBrightness(lamp.id, lamp.bri);
+          // Update room's average brightness
+          syncRoomBri(state.currentRoom);
+          updateRoomCard(state.currentRoom.id);
+        },
+        onSwipeLamp: function(pxOffset, snap, newIndex) {
+          if (snap) {
+            state.currentIndex = newIndex;
+            snapCarousel(newIndex);
+            updateDots(newIndex);
+          } else {
+            setCarouselOffset(state.currentIndex, pxOffset);
+          }
+        },
+        getLampCount: function() { return state.currentRoom.lights.length; },
+        getCurrentIndex: function() { return state.currentIndex; },
+      });
+    }
+
+    function syncRoomBri(room) {
+      var onLights = room.lights.filter(function(l) { return l.on; });
+      if (onLights.length > 0) {
+        room.bri = Math.round(onLights.reduce(function(s, l) { return s + l.bri; }, 0) / onLights.length);
+        room.on = true;
+      } else {
+        room.bri = 0;
+        room.on = false;
+      }
+    }
+
+    // ===== onboarding =====
     var onboardingEl = document.getElementById('onboarding');
     var statusEl = document.getElementById('onboard-status');
     var manualIpInput = document.getElementById('manual-ip');
     var manualIpBtn = document.getElementById('manual-ip-btn');
+    var certStepEl = document.getElementById('cert-step');
+    var certLinkEl = document.getElementById('cert-link');
 
     function sleep(ms) {
       return new Promise(function(r) { setTimeout(r, ms); });
     }
-
-    var certStepEl = document.getElementById('cert-step');
-    var certLinkEl = document.getElementById('cert-link');
 
     function showCertStep(ip) {
       certLinkEl.href = 'https://' + ip + '/';
@@ -481,54 +778,28 @@
       statusEl.textContent = 'Timed out. Please try again.';
     }
 
+    // ===== main =====
     async function loadAndRender() {
-      state.lights = await getLights(state.bridgeIp, state.username);
-      state.currentIndex = Math.min(state.currentIndex, state.lights.length - 1);
-      renderLamps(state.lights, state.currentIndex);
-      initGestures();
-    }
-
-    function initGestures() {
-      var carousel = document.getElementById('carousel');
-      initSwipe(carousel, {
-        onBrightnessStart: function() {
-          var lamp = state.lights[state.currentIndex];
-          state.startBri = lamp ? (lamp.on ? lamp.bri : 0) : 0;
-        },
-        onBrightnessChange: function(briDelta, sendApi) {
-          var lamp = state.lights[state.currentIndex];
-          if (!lamp) return;
-          var newBri = Math.round(Math.min(254, Math.max(0, state.startBri + briDelta * 254)));
-          lamp.bri = newBri;
-          lamp.on = newBri > 0;
-          updateLamp(state.currentIndex, lamp);
-          if (sendApi) setBrightness(state.bridgeIp, state.username, lamp.id, newBri);
-        },
-        onBrightnessEnd: function() {
-          var lamp = state.lights[state.currentIndex];
-          if (!lamp) return;
-          setBrightness(state.bridgeIp, state.username, lamp.id, lamp.bri);
-        },
-        onSwipeLamp: function(pxOffset, snap, newIndex) {
-          if (snap) {
-            state.currentIndex = newIndex;
-            snapCarousel(newIndex);
-            updateDots(newIndex);
-          } else {
-            setCarouselOffset(state.currentIndex, pxOffset);
-          }
-        },
-        getLampCount: function() { return state.lights.length; },
-        getCurrentIndex: function() { return state.currentIndex; },
-      });
+      state.rooms = await getRooms();
+      renderRooms();
+      showView('rooms');
     }
 
     function startPolling() {
       setInterval(async function() {
         try {
-          var fresh = await getLights(state.bridgeIp, state.username);
-          state.lights = fresh;
-          for (var i = 0; i < fresh.length; i++) updateLamp(i, fresh[i]);
+          var fresh = await getRooms();
+          state.rooms = fresh;
+          if (state.currentView === 'rooms') {
+            renderRooms();
+          } else if (state.currentRoom) {
+            // Update current room's lamp data
+            var freshRoom = fresh.find(function(r) { return r.id === state.currentRoom.id; });
+            if (freshRoom) {
+              state.currentRoom = freshRoom;
+              freshRoom.lights.forEach(function(l, i) { updateLamp(i, l); });
+            }
+          }
         } catch (e) {}
       }, 5000);
     }

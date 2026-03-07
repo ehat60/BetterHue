@@ -1,4 +1,4 @@
-var CACHE = 'betterhue-v1';
+var CACHE = 'betterhue-v2';
 var ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', function(e) {

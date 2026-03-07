@@ -342,11 +342,11 @@
       return await res.json();
     }
 
-    async function apiPut(path, body) {
-      await fetch('https://' + state.bridgeIp + '/api/' + state.username + path, {
+    function apiPut(path, body) {
+      fetch('https://' + state.bridgeIp + '/api/' + state.username + path, {
         method: 'PUT',
         body: JSON.stringify(body),
-      });
+      }).catch(function() {});
     }
 
     async function getRooms() {
@@ -452,7 +452,7 @@
     function initRoomSlider(card) {
       var roomId = card.getAttribute('data-room-id');
       var startX, startBri, moved, lastApi = 0;
-      var THROTTLE = 100;
+      var THROTTLE = 300;
 
       card.addEventListener('pointerdown', function(e) {
         card.setPointerCapture(e.pointerId);
@@ -814,7 +814,15 @@
           startPolling();
           return;
         } catch (e) {
-          clearCredentials();
+          // Don't clear credentials on network errors — bridge may just be unreachable
+          // Only clear if the bridge explicitly rejects us (auth error)
+          if (e.message === 'Invalid response') clearCredentials();
+          else {
+            // Show rooms view with retry via polling
+            showView('rooms');
+            startPolling();
+            return;
+          }
         }
       }
       startOnboarding();

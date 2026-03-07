@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>BetterHue</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a1a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #app {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    #carousel {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .carousel-track {
+      display: flex;
+      height: 100%;
+      will-change: transform;
+      transition: transform 0.3s ease-out;
+    }
+
+    .carousel-track.dragging { transition: none; }
+
+    .lamp-screen {
+      flex: 0 0 100%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brightness-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, #FF8F00, #FFB74D);
+      transition: height 0.05s linear;
+      pointer-events: none;
+    }
+
+    .lamp-screen.off .brightness-bar { background: #333; }
+
+    .lamp-name {
+      position: absolute;
+      top: 48px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      z-index: 2;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    }
+
+    .brightness-text {
+      position: relative;
+      z-index: 2;
+      font-size: 4rem;
+      font-weight: 700;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    #dots {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 0 max(16px, env(safe-area-inset-bottom));
+      z-index: 2;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .dot.active {
+      background: #fff;
+      transform: scale(1.3);
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .overlay.hidden { display: none; }
+
+    .overlay-content {
+      text-align: center;
+      padding: 32px;
+      max-width: 360px;
+    }
+
+    .overlay-content h1 { font-size: 2rem; margin-bottom: 12px; }
+    .overlay-content p { color: #aaa; margin-bottom: 24px; line-height: 1.5; }
+
+    #onboard-status {
+      margin-bottom: 24px;
+      font-size: 0.95rem;
+      color: #FFB74D;
+      min-height: 1.4em;
+    }
+
+    #manual-ip {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background: #222;
+      color: #fff;
+      font-size: 1rem;
+      text-align: center;
+      margin-bottom: 12px;
+      outline: none;
+    }
+
+    #manual-ip:focus { border-color: #FFB74D; }
+
+    #manual-ip-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #FF8F00;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #manual-ip-btn:active { background: #e68200; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="carousel"></div>
+    <div id="dots"></div>
+  </div>
+
+  <div id="onboarding" class="overlay">
+    <div class="overlay-content">
+      <h1>BetterHue</h1>
+      <p>Full-screen brightness control for your Hue lights.</p>
+      <div id="onboard-status">Searching for bridge...</div>
+      <input id="manual-ip" type="text" placeholder="Or enter bridge IP manually">
+      <button id="manual-ip-btn">Connect</button>
+      <div id="cert-step" style="display:none; margin-top: 20px;">
+        <p style="color:#aaa; font-size:0.85rem; margin-bottom:12px;">
+          First, accept your bridge's certificate:
+        </p>
+        <a id="cert-link" href="#" target="_blank" style="
+          display:inline-block; padding:10px 20px; background:#333; color:#FFB74D;
+          border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:12px;
+        ">Open Bridge &rarr;</a>
+        <p style="color:#666; font-size:0.8rem;">
+          Accept the warning, then come back here and tap Connect.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== bridge =====
+    const STORAGE_KEY_IP = 'betterhue_bridgeIp';
+    const STORAGE_KEY_USER = 'betterhue_username';
+
+    function getSavedCredentials() {
+      const bridgeIp = localStorage.getItem(STORAGE_KEY_IP);
+      const username = localStorage.getItem(STORAGE_KEY_USER);
+      return (bridgeIp && username) ? { bridgeIp, username } : null;
+    }
+
+    function saveCredentials(bridgeIp, username) {
+      localStorage.setItem(STORAGE_KEY_IP, bridgeIp);
+      localStorage.setItem(STORAGE_KEY_USER, username);
+    }
+
+    function clearCredentials() {
+      localStorage.removeItem(STORAGE_KEY_IP);
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
+
+    async function discoverBridge() {
+      try {
+        const res = await fetch('https://discovery.meethue.com/');
+        const data = await res.json();
+        if (data.length > 0) return data[0].internalipaddress;
+      } catch {}
+      return null;
+    }
+
+    async function authenticate(bridgeIp) {
+      const res = await fetch('https://' + bridgeIp + '/api', {
+        method: 'POST',
+        body: JSON.stringify({ devicetype: 'betterhue#browser' }),
+      });
+      const data = await res.json();
+      if (data[0] && data[0].success) {
+        const username = data[0].success.username;
+        saveCredentials(bridgeIp, username);
+        return username;
+      }
+      if (data[0] && data[0].error && data[0].error.type === 101) {
+        throw new Error('LINK_BUTTON');
+      }
+      throw new Error((data[0] && data[0].error && data[0].error.description) || 'Authentication failed');
+    }
+
+    async function getLights(bridgeIp, username) {
+      const res = await fetch('https://' + bridgeIp + '/api/' + username + '/lights');
+      const data = await res.json();
+      if (data.error || Array.isArray(data)) {
+        throw new Error('Invalid response');
+      }
+      return Object.entries(data).map(function(entry) {
+        var id = entry[0], light = entry[1];
+        return { id: id, name: light.name, on: light.state.on, bri: light.state.bri, reachable: light.state.reachable };
+      });
+    }
+
+    async function setBrightness(bridgeIp, username, lightId, bri) {
+      var on = bri > 0;
+      var body = on ? { on: true, bri: bri } : { on: false };
+      await fetch('https://' + bridgeIp + '/api/' + username + '/lights/' + lightId + '/state', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    }
+
+    // ===== ui =====
+    var trackEl = null;
+
+    function renderLamps(lights, currentIndex) {
+      var carousel = document.getElementById('carousel');
+      var dots = document.getElementById('dots');
+
+      var track = carousel.querySelector('.carousel-track');
+      if (!track) {
+        track = document.createElement('div');
+        track.className = 'carousel-track';
+        carousel.appendChild(track);
+      }
+      trackEl = track;
+
+      track.innerHTML = lights.map(function(lamp) {
+        var pct = Math.round((lamp.bri / 254) * 100);
+        var isOff = !lamp.on || lamp.bri === 0;
+        return '<div class="lamp-screen' + (isOff ? ' off' : '') + '" data-id="' + lamp.id + '">' +
+          '<div class="brightness-bar" style="height: ' + (isOff ? 0 : pct) + '%"></div>' +
+          '<div class="lamp-name">' + lamp.name + '</div>' +
+          '<div class="brightness-text">' + (isOff ? 'OFF' : pct + '%') + '</div>' +
+          '</div>';
+      }).join('');
+
+      dots.innerHTML = lights.map(function(_, i) {
+        return '<div class="dot' + (i === currentIndex ? ' active' : '') + '"></div>';
+      }).join('');
+
+      setCarouselPosition(currentIndex, false);
+    }
+
+    function updateLamp(index, lamp) {
+      if (!trackEl) return;
+      var screen = trackEl.children[index];
+      if (!screen) return;
+      var pct = Math.round((lamp.bri / 254) * 100);
+      var isOff = !lamp.on || lamp.bri === 0;
+      screen.className = 'lamp-screen' + (isOff ? ' off' : '');
+      screen.querySelector('.brightness-bar').style.height = (isOff ? 0 : pct) + '%';
+      screen.querySelector('.brightness-text').textContent = isOff ? 'OFF' : pct + '%';
+    }
+
+    function updateDots(currentIndex) {
+      var dots = document.getElementById('dots').children;
+      for (var i = 0; i < dots.length; i++) {
+        dots[i].classList.toggle('active', i === currentIndex);
+      }
+    }
+
+    function setCarouselPosition(index, animate) {
+      if (!trackEl) return;
+      if (animate) {
+        trackEl.classList.remove('dragging');
+      } else {
+        trackEl.classList.add('dragging');
+        requestAnimationFrame(function() { trackEl.classList.remove('dragging'); });
+      }
+      trackEl.style.transform = 'translateX(-' + (index * 100) + '%)';
+    }
+
+    function setCarouselOffset(index, pxOffset) {
+      if (!trackEl) return;
+      trackEl.classList.add('dragging');
+      var base = -index * trackEl.parentElement.offsetWidth;
+      trackEl.style.transform = 'translateX(' + (base + pxOffset) + 'px)';
+    }
+
+    function snapCarousel(index) {
+      if (!trackEl) return;
+      trackEl.classList.remove('dragging');
+      trackEl.style.transform = 'translateX(-' + (index * 100) + '%)';
+    }
+
+    // ===== swipe =====
+    function initSwipe(carousel, callbacks) {
+      var LOCK_THRESHOLD = 10;
+      var SNAP_THRESHOLD = 0.3;
+      var THROTTLE_MS = 100;
+
+      var startX, startY, deltaX, deltaY;
+      var axis = null;
+      var lastApiCall = 0;
+      var pointerId = null;
+
+      carousel.addEventListener('pointerdown', function(e) {
+        if (pointerId !== null) return;
+        pointerId = e.pointerId;
+        carousel.setPointerCapture(e.pointerId);
+        startX = e.clientX;
+        startY = e.clientY;
+        deltaX = 0;
+        deltaY = 0;
+        axis = null;
+      });
+
+      carousel.addEventListener('pointermove', function(e) {
+        if (e.pointerId !== pointerId) return;
+        deltaX = e.clientX - startX;
+        deltaY = e.clientY - startY;
+
+        if (!axis) {
+          if (Math.abs(deltaX) > LOCK_THRESHOLD) axis = 'x';
+          else if (Math.abs(deltaY) > LOCK_THRESHOLD) {
+            axis = 'y';
+            callbacks.onBrightnessStart();
+          }
+          else return;
+        }
+
+        if (axis === 'y') {
+          var screenH = carousel.offsetHeight;
+          var briDelta = -deltaY / screenH;
+          var now = Date.now();
+          var throttled = (now - lastApiCall) >= THROTTLE_MS;
+          callbacks.onBrightnessChange(briDelta, throttled);
+          if (throttled) lastApiCall = now;
+        } else {
+          callbacks.onSwipeLamp(deltaX, false);
+        }
+      });
+
+      function endHandler(e) {
+        if (e.pointerId !== pointerId) return;
+        pointerId = null;
+
+        if (axis === 'y') {
+          callbacks.onBrightnessEnd();
+        } else if (axis === 'x') {
+          var screenW = carousel.offsetWidth;
+          var fraction = deltaX / screenW;
+          var count = callbacks.getLampCount();
+          var cur = callbacks.getCurrentIndex();
+          var newIndex = cur;
+          if (fraction < -SNAP_THRESHOLD && cur < count - 1) newIndex = cur + 1;
+          else if (fraction > SNAP_THRESHOLD && cur > 0) newIndex = cur - 1;
+          callbacks.onSwipeLamp(0, true, newIndex);
+        }
+        axis = null;
+      }
+
+      carousel.addEventListener('pointerup', endHandler);
+      carousel.addEventListener('pointercancel', endHandler);
+    }
+
+    // ===== app =====
+    var state = {
+      bridgeIp: null,
+      username: null,
+      lights: [],
+      currentIndex: 0,
+      startBri: 0,
+    };
+
+    var onboardingEl = document.getElementById('onboarding');
+    var statusEl = document.getElementById('onboard-status');
+    var manualIpInput = document.getElementById('manual-ip');
+    var manualIpBtn = document.getElementById('manual-ip-btn');
+
+    function sleep(ms) {
+      return new Promise(function(r) { setTimeout(r, ms); });
+    }
+
+    var certStepEl = document.getElementById('cert-step');
+    var certLinkEl = document.getElementById('cert-link');
+
+    function showCertStep(ip) {
+      certLinkEl.href = 'https://' + ip + '/';
+      certStepEl.style.display = 'block';
+    }
+
+    async function startOnboarding() {
+      onboardingEl.classList.remove('hidden');
+      statusEl.textContent = 'Searching for bridge...';
+      var ip = await discoverBridge();
+      if (ip) {
+        manualIpInput.value = ip;
+        statusEl.textContent = 'Found bridge at ' + ip + '. Accept the certificate below, then press Connect.';
+        showCertStep(ip);
+      } else {
+        statusEl.textContent = 'Could not find bridge automatically. Enter IP below.';
+      }
+    }
+
+    manualIpBtn.addEventListener('click', function() {
+      var ip = manualIpInput.value.trim();
+      if (ip) {
+        showCertStep(ip);
+        statusEl.textContent = 'Connecting to ' + ip + '... Press the link button on the bridge.';
+        tryAuth(ip);
+      }
+    });
+
+    async function tryAuth(ip) {
+      var attempts = 0;
+      var maxAttempts = 30;
+      while (attempts < maxAttempts) {
+        try {
+          var username = await authenticate(ip);
+          state.bridgeIp = ip;
+          state.username = username;
+          onboardingEl.classList.add('hidden');
+          await loadAndRender();
+          startPolling();
+          return;
+        } catch (e) {
+          if (e.message === 'LINK_BUTTON') {
+            statusEl.textContent = 'Press the link button on your bridge... (' + (maxAttempts - attempts) + 's)';
+            await sleep(1000);
+            attempts++;
+          } else {
+            statusEl.textContent = 'Error: ' + e.message;
+            return;
+          }
+        }
+      }
+      statusEl.textContent = 'Timed out. Please try again.';
+    }
+
+    async function loadAndRender() {
+      state.lights = await getLights(state.bridgeIp, state.username);
+      state.currentIndex = Math.min(state.currentIndex, state.lights.length - 1);
+      renderLamps(state.lights, state.currentIndex);
+      initGestures();
+    }
+
+    function initGestures() {
+      var carousel = document.getElementById('carousel');
+      initSwipe(carousel, {
+        onBrightnessStart: function() {
+          var lamp = state.lights[state.currentIndex];
+          state.startBri = lamp ? (lamp.on ? lamp.bri : 0) : 0;
+        },
+        onBrightnessChange: function(briDelta, sendApi) {
+          var lamp = state.lights[state.currentIndex];
+          if (!lamp) return;
+          var newBri = Math.round(Math.min(254, Math.max(0, state.startBri + briDelta * 254)));
+          lamp.bri = newBri;
+          lamp.on = newBri > 0;
+          updateLamp(state.currentIndex, lamp);
+          if (sendApi) setBrightness(state.bridgeIp, state.username, lamp.id, newBri);
+        },
+        onBrightnessEnd: function() {
+          var lamp = state.lights[state.currentIndex];
+          if (!lamp) return;
+          setBrightness(state.bridgeIp, state.username, lamp.id, lamp.bri);
+        },
+        onSwipeLamp: function(pxOffset, snap, newIndex) {
+          if (snap) {
+            state.currentIndex = newIndex;
+            snapCarousel(newIndex);
+            updateDots(newIndex);
+          } else {
+            setCarouselOffset(state.currentIndex, pxOffset);
+          }
+        },
+        getLampCount: function() { return state.lights.length; },
+        getCurrentIndex: function() { return state.currentIndex; },
+      });
+    }
+
+    function startPolling() {
+      setInterval(async function() {
+        try {
+          var fresh = await getLights(state.bridgeIp, state.username);
+          state.lights = fresh;
+          for (var i = 0; i < fresh.length; i++) updateLamp(i, fresh[i]);
+        } catch (e) {}
+      }, 5000);
+    }
+
+    async function init() {
+      var creds = getSavedCredentials();
+      if (creds) {
+        state.bridgeIp = creds.bridgeIp;
+        state.username = creds.username;
+        try {
+          await loadAndRender();
+          startPolling();
+          return;
+        } catch (e) {
+          clearCredentials();
+        }
+      }
+      startOnboarding();
+    }
+
+    // ===== service worker =====
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+
+    init();
+  </script>
+</body>
+</html>

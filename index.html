@@ -831,20 +831,24 @@
     }
 
     async function init() {
+      console.log('[BH] localStorage bridgeIp:', localStorage.getItem(STORAGE_KEY_IP));
+      console.log('[BH] localStorage username:', localStorage.getItem(STORAGE_KEY_USER));
       var creds = getSavedCredentials();
+      console.log('[BH] creds:', creds);
       if (creds) {
         state.bridgeIp = creds.bridgeIp;
         state.username = creds.username;
         try {
           await loadAndRender();
+          console.log('[BH] loadAndRender OK, rooms:', state.rooms.length);
         } catch (e) {
-          // Bridge unreachable or any error — keep credentials, show empty rooms
-          console.warn('Bridge error on init:', e.message);
+          console.warn('[BH] loadAndRender failed:', e);
           showView('rooms');
         }
         startPolling();
         return;
       }
+      console.log('[BH] No credentials, showing onboarding');
       startOnboarding();
     }
 

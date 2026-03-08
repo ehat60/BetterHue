@@ -35,6 +35,19 @@
       padding: 48px 24px 16px;
       font-size: 1.6rem;
       font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .reset-btn {
+      font-size: 0.75rem;
+      color: #666;
+      background: none;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
     }
 
     .room-card {
@@ -253,7 +266,10 @@
 
   <!-- Room List View -->
   <div id="rooms-view" class="view">
-    <div class="rooms-header">Rooms</div>
+    <div class="rooms-header">
+      <span>Rooms</span>
+      <button class="reset-btn" id="reset-btn">Forget Bridge</button>
+    </div>
     <div id="room-list"></div>
   </div>
 
@@ -821,21 +837,21 @@
         state.username = creds.username;
         try {
           await loadAndRender();
-          startPolling();
-          return;
         } catch (e) {
-          if (e.message === 'NETWORK_ERROR') {
-            // Bridge unreachable — keep credentials, retry via polling
-            showView('rooms');
-            startPolling();
-            return;
-          }
-          // Actual auth error — clear and re-onboard
-          clearCredentials();
+          // Bridge unreachable or any error — keep credentials, show empty rooms
+          console.warn('Bridge error on init:', e.message);
+          showView('rooms');
         }
+        startPolling();
+        return;
       }
       startOnboarding();
     }
+
+    document.getElementById('reset-btn').addEventListener('click', function() {
+      clearCredentials();
+      location.reload();
+    });
 
     // ===== service worker =====
     if ('serviceWorker' in navigator) {

@@ -6,7 +6,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <title>BetterHue</title>
-  <link rel="manifest" href="manifest.json">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -82,23 +81,9 @@
       pointer-events: none;
     }
 
-    .room-name {
-      font-size: 1.15rem;
-      font-weight: 600;
-    }
-
-    .room-bri {
-      font-size: 1.15rem;
-      font-weight: 700;
-      min-width: 48px;
-      text-align: right;
-    }
-
-    .room-lights-count {
-      font-size: 0.8rem;
-      color: rgba(255,255,255,0.5);
-      margin-top: 2px;
-    }
+    .room-name { font-size: 1.15rem; font-weight: 600; }
+    .room-bri { font-size: 1.15rem; font-weight: 700; min-width: 48px; text-align: right; }
+    .room-lights-count { font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 2px; }
 
     /* ===== Lamp Carousel ===== */
     #lamp-view { touch-action: none; }
@@ -121,16 +106,9 @@
       line-height: 1;
     }
 
-    .lamp-header-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
+    .lamp-header-title { font-size: 1.1rem; font-weight: 600; }
 
-    #carousel {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-    }
+    #carousel { flex: 1; position: relative; overflow: hidden; }
 
     .carousel-track {
       display: flex;
@@ -153,9 +131,7 @@
 
     .brightness-bar {
       position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      bottom: 0; left: 0; right: 0;
       background: linear-gradient(to top, #FF8F00, #FFB74D);
       transition: height 0.05s linear;
       pointer-events: none;
@@ -165,13 +141,9 @@
 
     .lamp-name {
       position: absolute;
-      top: 48px;
-      left: 0;
-      right: 0;
+      top: 48px; left: 0; right: 0;
       text-align: center;
-      font-size: 1.2rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      font-size: 1.2rem; font-weight: 600;
       z-index: 2;
       text-shadow: 0 1px 4px rgba(0,0,0,0.5);
     }
@@ -179,8 +151,7 @@
     .brightness-text {
       position: relative;
       z-index: 2;
-      font-size: 4rem;
-      font-weight: 700;
+      font-size: 4rem; font-weight: 700;
       text-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
 
@@ -194,9 +165,7 @@
     }
 
     .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+      width: 8px; height: 8px; border-radius: 50%;
       background: rgba(255,255,255,0.3);
       transition: background 0.2s, transform 0.2s;
     }
@@ -205,8 +174,7 @@
 
     /* ===== Onboarding ===== */
     .overlay {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       background: rgba(0,0,0,0.92);
       display: flex;
       align-items: center;
@@ -216,12 +184,7 @@
 
     .overlay.hidden { display: none; }
 
-    .overlay-content {
-      text-align: center;
-      padding: 32px;
-      max-width: 360px;
-    }
-
+    .overlay-content { text-align: center; padding: 32px; max-width: 360px; }
     .overlay-content h1 { font-size: 2rem; margin-bottom: 12px; }
     .overlay-content p { color: #aaa; margin-bottom: 24px; line-height: 1.5; }
 
@@ -291,18 +254,6 @@
       <div id="onboard-status">Searching for bridge...</div>
       <input id="manual-ip" type="text" placeholder="Or enter bridge IP manually">
       <button id="manual-ip-btn">Connect</button>
-      <div id="cert-step" style="display:none; margin-top: 20px;">
-        <p style="color:#aaa; font-size:0.85rem; margin-bottom:12px;">
-          First, accept your bridge's certificate:
-        </p>
-        <a id="cert-link" href="#" target="_blank" style="
-          display:inline-block; padding:10px 20px; background:#333; color:#FFB74D;
-          border-radius:8px; text-decoration:none; font-weight:600; margin-bottom:12px;
-        ">Open Bridge &rarr;</a>
-        <p style="color:#666; font-size:0.8rem;">
-          Accept the warning, then come back here and tap Connect.
-        </p>
-      </div>
     </div>
   </div>
 
@@ -336,8 +287,12 @@
       return null;
     }
 
+    function bridgeUrl(ip, path) {
+      return 'http://' + ip + '/api' + path;
+    }
+
     async function authenticate(bridgeIp) {
-      var res = await fetch('https://' + bridgeIp + '/api', {
+      var res = await fetch(bridgeUrl(bridgeIp, ''), {
         method: 'POST',
         body: JSON.stringify({ devicetype: 'betterhue#browser' }),
       });
@@ -354,17 +309,12 @@
     }
 
     async function apiGet(path) {
-      var res;
-      try {
-        res = await fetch('https://' + state.bridgeIp + '/api/' + state.username + path);
-      } catch (e) {
-        throw new Error('NETWORK_ERROR');
-      }
+      var res = await fetch(bridgeUrl(state.bridgeIp, '/' + state.username + path));
       return await res.json();
     }
 
     function apiPut(path, body) {
-      fetch('https://' + state.bridgeIp + '/api/' + state.username + path, {
+      fetch(bridgeUrl(state.bridgeIp, '/' + state.username + path), {
         method: 'PUT',
         body: JSON.stringify(body),
       }).catch(function() {});
@@ -383,34 +333,30 @@
           return { id: lid, name: l.name, on: l.state.on, bri: l.state.bri, reachable: l.state.reachable };
         }).filter(Boolean);
 
-        // Average brightness of lights that are on
         var onLights = roomLights.filter(function(l) { return l.on; });
         var avgBri = onLights.length > 0
           ? Math.round(onLights.reduce(function(s, l) { return s + l.bri; }, 0) / onLights.length)
           : 0;
-        var anyOn = onLights.length > 0;
 
         rooms.push({
           id: id,
           name: g.name,
           lights: roomLights,
           bri: avgBri,
-          on: anyOn,
+          on: onLights.length > 0,
         });
       });
       return rooms;
     }
 
-    async function setRoomBrightness(roomId, bri) {
-      var on = bri > 0;
-      var body = on ? { on: true, bri: bri } : { on: false };
-      await apiPut('/groups/' + roomId + '/action', body);
+    function setRoomBrightness(roomId, bri) {
+      var body = bri > 0 ? { on: true, bri: bri } : { on: false };
+      apiPut('/groups/' + roomId + '/action', body);
     }
 
-    async function setLightBrightness(lightId, bri) {
-      var on = bri > 0;
-      var body = on ? { on: true, bri: bri } : { on: false };
-      await apiPut('/lights/' + lightId + '/state', body);
+    function setLightBrightness(lightId, bri) {
+      var body = bri > 0 ? { on: true, bri: bri } : { on: false };
+      apiPut('/lights/' + lightId + '/state', body);
     }
 
     // ===== state =====
@@ -418,7 +364,7 @@
       bridgeIp: null,
       username: null,
       rooms: [],
-      currentView: 'rooms', // 'rooms' | 'lamps'
+      currentView: 'rooms',
       currentRoom: null,
       currentIndex: 0,
       startBri: 0,
@@ -453,7 +399,6 @@
         '</div>';
       }).join('');
 
-      // Attach slider + tap to each card
       var cards = roomListEl.querySelectorAll('.room-card');
       cards.forEach(function(card) { initRoomSlider(card); });
     }
@@ -469,6 +414,8 @@
       card.querySelector('.room-fill').style.width = (isOff ? 0 : pct) + '%';
       card.querySelector('.room-bri').textContent = isOff ? 'OFF' : pct + '%';
     }
+
+    var sliding = false;
 
     function initRoomSlider(card) {
       var roomId = card.getAttribute('data-room-id');
@@ -489,7 +436,6 @@
         if (Math.abs(dx) < 8 && !moved) return;
         moved = true;
 
-        // Map drag distance to brightness: full card width = full range (254)
         var cardW = card.offsetWidth;
         var newBri = Math.round(Math.min(254, Math.max(0, startBri + (dx / cardW) * 254)));
 
@@ -497,7 +443,6 @@
         if (!room) return;
         room.bri = newBri;
         room.on = newBri > 0;
-        // Update each light in local state too
         room.lights.forEach(function(l) { l.bri = newBri; l.on = newBri > 0; });
         updateRoomCard(roomId);
 
@@ -616,7 +561,6 @@
       var LOCK_THRESHOLD = 10;
       var SNAP_THRESHOLD = 0.3;
       var THROTTLE_MS = 100;
-
       var startX, startY, deltaX, deltaY;
       var axis = null;
       var lastApiCall = 0;
@@ -662,7 +606,6 @@
       function endHandler(e) {
         if (e.pointerId !== pointerId) return;
         pointerId = null;
-
         if (axis === 'y') {
           callbacks.onBrightnessEnd();
         } else if (axis === 'x') {
@@ -684,7 +627,6 @@
 
     function initLampGestures() {
       var carousel = document.getElementById('carousel');
-      // Remove old listeners by replacing the element
       var newCarousel = carousel.cloneNode(true);
       carousel.parentNode.replaceChild(newCarousel, carousel);
       trackEl = newCarousel.querySelector('.carousel-track');
@@ -707,7 +649,6 @@
           var lamp = state.currentRoom.lights[state.currentIndex];
           if (!lamp) return;
           setLightBrightness(lamp.id, lamp.bri);
-          // Update room's average brightness
           syncRoomBri(state.currentRoom);
           updateRoomCard(state.currentRoom.id);
         },
@@ -741,16 +682,9 @@
     var statusEl = document.getElementById('onboard-status');
     var manualIpInput = document.getElementById('manual-ip');
     var manualIpBtn = document.getElementById('manual-ip-btn');
-    var certStepEl = document.getElementById('cert-step');
-    var certLinkEl = document.getElementById('cert-link');
 
     function sleep(ms) {
       return new Promise(function(r) { setTimeout(r, ms); });
-    }
-
-    function showCertStep(ip) {
-      certLinkEl.href = 'https://' + ip + '/';
-      certStepEl.style.display = 'block';
     }
 
     async function startOnboarding() {
@@ -759,8 +693,7 @@
       var ip = await discoverBridge();
       if (ip) {
         manualIpInput.value = ip;
-        statusEl.textContent = 'Found bridge at ' + ip + '. Accept the certificate below, then press Connect.';
-        showCertStep(ip);
+        statusEl.textContent = 'Found bridge at ' + ip + '. Press link button, then tap Connect.';
       } else {
         statusEl.textContent = 'Could not find bridge automatically. Enter IP below.';
       }
@@ -769,7 +702,6 @@
     manualIpBtn.addEventListener('click', function() {
       var ip = manualIpInput.value.trim();
       if (ip) {
-        showCertStep(ip);
         statusEl.textContent = 'Connecting to ' + ip + '... Press the link button on the bridge.';
         tryAuth(ip);
       }
@@ -808,16 +740,13 @@
       showView('rooms');
     }
 
-    var sliding = false; // true while user is dragging a room slider
-
     function startPolling() {
       setInterval(async function() {
-        if (sliding) return; // don't update state while user is dragging
+        if (sliding) return;
         try {
           var fresh = await getRooms();
           state.rooms = fresh;
           if (state.currentView === 'rooms') {
-            // Update cards in-place instead of rebuilding
             fresh.forEach(function(room) { updateRoomCard(room.id); });
           } else if (state.currentRoom) {
             var freshRoom = fresh.find(function(r) { return r.id === state.currentRoom.id; });
@@ -831,24 +760,18 @@
     }
 
     async function init() {
-      console.log('[BH] localStorage bridgeIp:', localStorage.getItem(STORAGE_KEY_IP));
-      console.log('[BH] localStorage username:', localStorage.getItem(STORAGE_KEY_USER));
       var creds = getSavedCredentials();
-      console.log('[BH] creds:', creds);
       if (creds) {
         state.bridgeIp = creds.bridgeIp;
         state.username = creds.username;
         try {
           await loadAndRender();
-          console.log('[BH] loadAndRender OK, rooms:', state.rooms.length);
         } catch (e) {
-          console.warn('[BH] loadAndRender failed:', e);
           showView('rooms');
         }
         startPolling();
         return;
       }
-      console.log('[BH] No credentials, showing onboarding');
       startOnboarding();
     }
 
@@ -856,11 +779,6 @@
       clearCredentials();
       location.reload();
     });
-
-    // ===== service worker =====
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
-    }
 
     init();
   </script>
